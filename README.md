@@ -75,6 +75,17 @@ Authorization: Bearer <API_KEY>
 1. DSH credentials seam / environment `OPENCODE_GO_API_KEY` (`$DSH_HOME/.credentials.yaml`)
 2. OpenCode `~/.local/share/opencode/auth.json` → the `opencode-go` entry (fallback `opencode`) with `type: "api"`
 
+## Platform support
+
+Works on **macOS, Linux, and Windows**. The plugin is plain ESM with no native binaries or build step, and both halves (Host and Client) are platform-independent.
+
+| Platform | API key resolution |
+| --- | --- |
+| macOS / Linux | ✅ `~/.local/share/opencode/auth.json` is exactly where the OpenCode CLI stores it — works out of the box |
+| Windows | Use `OPENCODE_GO_API_KEY` (credentials seam or environment) for best results; an `auth.json` in the same relative location is also read |
+
+Requirements on any platform: Node.js + [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), the `opencode-go` model configured in **Settings → Models**, and an OpenCode Go API key.
+
 ## How it works
 
 A dual-face (Host + Client) plugin. The Host publishes the `opencodeUsage` Typert Remote service; the Client mounts it, registers the `settings.section`, and renders the page. Communication rides the harness `/api` RPC carrier.

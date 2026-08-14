@@ -75,6 +75,17 @@ Authorization: Bearer <API_KEY>
 1. DSH 凭据 seam / 环境变量 `OPENCODE_GO_API_KEY`（`$DSH_HOME/.credentials.yaml`）
 2. OpenCode `~/.local/share/opencode/auth.json` → `opencode-go`（回退 `opencode`）条目中 `type: "api"` 的 key
 
+## 平台支持
+
+**macOS、Linux、Windows 均可用**。插件是纯 ESM，无原生二进制、无构建步骤，Host 与 Client 两半都与平台无关。
+
+| 平台 | API Key 解析 |
+| --- | --- |
+| macOS / Linux | ✅ `~/.local/share/opencode/auth.json` 正是 OpenCode CLI 的默认存储位置，开箱即用 |
+| Windows | 建议用 `OPENCODE_GO_API_KEY`（凭据 seam 或环境变量）；相同相对位置存在 `auth.json` 时也会读取 |
+
+任一平台的前置条件：Node.js + [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)，在「设置 → 模型」中配置 `opencode-go` 模型，以及一个 OpenCode Go API key。
+
 ## 工作原理
 
 这是一个双面（Host + Client）插件。Host 发布 `opencodeUsage` Typert Remote 服务；Client 挂载它、注册 `settings.section` 并渲染页面；二者经 harness 的 `/api` RPC 传输通信。
