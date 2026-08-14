@@ -4,6 +4,10 @@
 
 一个 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web GUI 插件：在设置页侧边栏新增 **OpenCode Go** 入口，点击即可查看你 OpenCode Go 订阅的三个用量窗口 —— **5 小时滚动 / 每周 / 每月** —— 的已用百分比、消费限额与重置时间。
 
+## 截图
+
+![OpenCode Go 用量页面](docs/opencode-go-usage.png)
+
 ## 功能
 
 - 设置侧边栏新增 **「OpenCode Go」** 分区（`settings.section` 贡献）

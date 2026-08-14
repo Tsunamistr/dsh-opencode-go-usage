@@ -4,6 +4,10 @@ English | [中文](README.zh.md)
 
 A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) web-GUI plugin that adds an **OpenCode Go** entry to the Settings sidebar. Click it to see your OpenCode Go subscription's three usage windows — **5-hour rolling / weekly / monthly** — with percent used, spend limit, and reset time.
 
+## Screenshot
+
+![OpenCode Go usage page](docs/opencode-go-usage.png)
+
 ## Features
 
 - Settings sidebar section **"OpenCode Go"** (a `settings.section` contribution)
