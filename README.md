@@ -1,112 +1,67 @@
 # dsh-opencode-go-usage
 
-English | [中文](README.zh.md)
+DeepSeek Harness Web GUI 插件：在**对话界面右下角常驻悬浮卡片**上实时显示 OpenCode Go 订阅用量（**5 小时滚动 / 每周 / 每月**），**每 30 秒自动刷新**，无需手动操作。
 
-A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) web-GUI plugin that adds an **OpenCode Go** entry to the Settings sidebar. Click it to see your OpenCode Go subscription's three usage windows — **5-hour rolling / weekly / monthly** — with percent used, spend limit, and reset time.
+本项目是 [xiaoqi20/dsh-opencode-go-usage](https://github.com/xiaoqi20/dsh-opencode-go-usage)（设置页 + 手动刷新）的再开发版本。
 
-## Screenshot
+## 功能
 
-![OpenCode Go usage page](docs/opencode-go-usage.png)
+- 右下角悬浮卡片：三个用量窗口的百分比、进度条、限额与重置时间
+- 每 30 秒自动刷新；页面底部显示"更新于"时间戳
+- 可折叠为小胶囊（显示 5h 滚动百分比），点击展开
+- 手动刷新按钮（↻）、错误状态友好提示 + 重试
+- 用量 ≥80% 进度条变黄，≥100% 变红
+- 中 / 英双语，跟随界面语言
+- 自适应明暗主题
 
-## Features
+## 效果图
 
-- Settings sidebar section **"OpenCode Go"** (a `settings.section` contribution)
-- Host-side Typert Remote `opencodeUsage/usage` reads the API key and calls the official endpoint
-- Client usage page: per-window percent, progress bar, limit, and reset time
-- Precondition check: if opencode-go is missing from **Settings → Models**, or no API key is found, it shows guidance instead of an error
-- API key resolved from the DSH credentials seam (`OPENCODE_GO_API_KEY`) with a fallback to OpenCode's `auth.json`
+![DeepSeek Harness 右下角悬浮用量卡片](./docs/screenshot.png)
 
-## Install
+## 安装
 
-```sh
-dsh plugin --profile web add github:xiaoqi20/dsh-opencode-go-usage
+```bash
+# 1) 将插件链接进 web profile
+dsh plugin --profile web add <本目录>
+
+# 2) 在 $DSH_HOME/profiles/web/cordis.patch.yml 中加入一行
+#    （顶层数组末尾追加 insert 条目）：
+# - insert:
+#     - id: opencode-go-usage
+#       name: 'dsh-opencode-go-usage'
+
+# 3) 重启 dsh web
 ```
 
-Add the plugin row to your profile's patch layer (`$DSH_HOME/profiles/web/cordis.patch.yml`):
+重启后打开 Web UI，右下角即出现用量卡片，自动开始轮询。
 
-```yaml
-- insert:
-    - id: opencode-go-usage
-      name: 'dsh-opencode-go-usage'
-```
+## API Key 解析顺序
 
-Restart `dsh web` so the host half and the served client bundle pick up the plugin. The plugin needs the standard web bundle composition (the `api-gateway` client Remote and the `settings.section` slot) — the default `dsh web` profile has both.
+1. DSH 凭据 seam / 环境变量 `OPENCODE_GO_API_KEY`（`$DSH_HOME/.credentials.yaml`）
+2. OpenCode `~/.local/share/opencode/auth.json` → `opencode-go`（回退 `opencode`）条目中 `type: "api"` 的 key
 
-## Configuration
+## 配置（可选）
 
-Host-side tunables live on the plugin row in `cordis.yml`:
+在 profile 的 patch 层覆盖本行的 `config`（patch 会整体替换该行 config，需重述所有键）：
 
 ```yaml
 - id: opencode-go-usage
-  name: dsh-opencode-go-usage
   config:
-    baseUrl: https://opencode.ai/zen/go/v1/usage   # default
-    timeoutMs: 15000                                # default
+    baseUrl: https://opencode.ai/zen/go/v1/usage   # 默认
+    timeoutMs: 15000                                # 默认
 ```
 
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `baseUrl` | `https://opencode.ai/zen/go/v1/usage` | The usage endpoint. |
-| `timeoutMs` | `15000` | Fetch timeout in milliseconds. |
+## 接口
 
-## The usage endpoint
+Host 注册同源只读路由 `GET /opencode-go-usage/status`，返回结构化 JSON（`configured` / `error` / `usage.rolling|weekly|monthly` / `fetchedAt`），带 5 秒内存缓存。**响应不含 API Key。**
 
-```http
-GET https://opencode.ai/zen/go/v1/usage
-Authorization: Bearer <API_KEY>
-```
+用量接口 `GET https://opencode.ai/zen/go/v1/usage`（Bearer 认证）尚未写入 OpenCode 公开文档，响应结构可能变动；解析做了防御式处理。
 
-`<API_KEY>` is the Anthropic-compatible OpenCode Go key (`sk-opencode-…`). The endpoint returns:
+## 架构说明
 
-```json
-{
-  "usage": {
-    "rolling": { "status": "ok", "percent": 9,  "resetsAt": "2026-08-14T07:20:04.810Z" },
-    "weekly":  { "status": "ok", "percent": 12, "resetsAt": "2026-08-17T00:00:00.810Z" },
-    "monthly": { "status": "ok", "percent": 6,  "resetsAt": "2026-09-09T00:41:03.810Z" }
-  }
-}
-```
+- Host 半 `index.js`：**零外部依赖**（仅 Node 内置模块 + `webServer`/`credentials` 服务），通过 `webServer.register` 提供状态路由；无论从哪个目录 link 安装都不会出现 peer 依赖解析失败。
+- 浏览器半 `client.js`：自包含 lazy-CJS bundle（仅 `require('react')`），注册到 `shell.overlay` 全局悬浮层，通过 `fetch` 轮询状态路由。
 
-`percent` is 0–100; `resetsAt` is ISO-8601. The endpoint is not yet in OpenCode's public docs.
+## 许可证
 
-## API key resolution order
-
-1. DSH credentials seam / environment `OPENCODE_GO_API_KEY` (`$DSH_HOME/.credentials.yaml`)
-2. OpenCode `~/.local/share/opencode/auth.json` → the `opencode-go` entry (fallback `opencode`) with `type: "api"`
-
-## Platform support
-
-Works on **macOS, Linux, and Windows**. The plugin is plain ESM with no native binaries or build step, and both halves (Host and Client) are platform-independent.
-
-| Platform | API key resolution |
-| --- | --- |
-| macOS / Linux | ✅ `~/.local/share/opencode/auth.json` is exactly where the OpenCode CLI stores it — works out of the box |
-| Windows | Use `OPENCODE_GO_API_KEY` (credentials seam or environment) for best results; an `auth.json` in the same relative location is also read |
-
-Requirements on any platform: Node.js + [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), the `opencode-go` model configured in **Settings → Models**, and an OpenCode Go API key.
-
-## How it works
-
-A dual-face (Host + Client) plugin. The Host publishes the `opencodeUsage` Typert Remote service; the Client mounts it, registers the `settings.section`, and renders the page. Communication rides the harness `/api` RPC carrier.
-
-| File | Role |
-| --- | --- |
-| `index.js` | Host half — `OpencodeUsageGateway` (`TypertRemoteService`, service key `opencodeUsage`) |
-| `typert.host.js` | Hand-written Typert host manifest, registered via `exports["./typert"]` |
-| `client.js` | Browser bundle in `window.__ModuleLoader__.load` format — mounts the Remote, registers the section, renders the page |
-| `package.json` | Dual-face declaration: `main` + `exports["./client"]` + `exports["./typert"]` + `dsh.client` |
-
-## Development
-
-The plugin is plain ESM and needs no build step. Host files import `@deepseek-ai/*` peers; the client bundle is hand-written in the lazy-CJS format the harness client loader serves under `/plugins`.
-
-## Known limitations
-
-- The usage endpoint is undocumented and may change; parsing is defensive, and non-200 responses surface as a friendly status rather than a crash.
-- Quota limits ($12 / $30 / $60) are shown for context only and are not part of the response; they follow the OpenCode Go plan and can drift.
-
-## License
-
-MIT
-
+MIT。再开发自 xiaoqi20/dsh-opencode-go-usage（MIT）。
