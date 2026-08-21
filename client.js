@@ -69,14 +69,9 @@ window.__ModuleLoader__.load({
 
     const CSS = [
       '.ogw-card{position:fixed;right:16px;bottom:16px;width:264px;pointer-events:auto;border:1px solid var(--dsw-alias-border-l2,rgba(15,17,21,.14));border-radius:12px;background:var(--dsw-alias-bg-layer-3,#ffffff);box-shadow:0 12px 32px rgba(15,17,21,.18);color:var(--dsw-alias-label-primary,#0f1115);font-size:12px;overflow:hidden;backdrop-filter:blur(14px)}',
-      '.ogw-capsule{position:fixed;right:16px;bottom:16px;width:56px;height:56px;border-radius:50%;pointer-events:auto;cursor:pointer;user-select:none;background:var(--dsw-alias-bg-layer-3,#ffffff);box-shadow:0 8px 24px rgba(15,17,21,.16);border:1px solid var(--dsw-alias-border-l2,rgba(15,17,21,.14))}',
-      '.ogw-capsule:hover{box-shadow:0 10px 28px rgba(15,17,21,.26)}',
-      '.ogw-ring{position:absolute;inset:3px;transform:rotate(-90deg)}',
-      '.ogw-ring .ogw-tone-ok{stroke:var(--dsw-alias-state-business-primary,#3964fe)}',
-      '.ogw-ring .ogw-tone-warn{stroke:var(--dsw-alias-state-warn-primary,#e6a23c)}',
-      '.ogw-ring .ogw-tone-error{stroke:var(--dsw-alias-state-error-primary,#e5484d)}',
-      '.ogw-ring .ogw-tone-none{stroke:var(--dsw-alias-label-tertiary,#81858c);opacity:.6}',
-      '.ogw-ring-center{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums}',
+      '.ogw-ring-wrap{position:fixed;pointer-events:none;z-index:2147483647}',
+      '.ogw-ring-svg{display:block;width:100%;height:100%;overflow:visible}',
+      '.ogw-ring-hit{pointer-events:stroke;cursor:pointer}',
       '.ogw-head{display:flex;align-items:center;gap:8px;padding:10px 12px 8px}',
       '.ogw-title{font-weight:600}',
       '.ogw-spacer{flex:1}',
@@ -133,6 +128,83 @@ window.__ModuleLoader__.load({
       return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + hh + ':' + mi
     }
 
+    function findSendButton() {
+      const selectors = [
+        'button[aria-label*="send" i]',
+        'button[aria-label*="发送" i]',
+        'button[title*="send" i]',
+        'button[title*="发送" i]',
+        '[data-testid*="send" i]',
+        'button[class*="send" i]',
+        'button[type="submit"]',
+      ]
+      for (const selector of selectors) {
+        try {
+          const elements = document.querySelectorAll(selector)
+          for (const el of elements) {
+            const rect = el.getBoundingClientRect()
+            if (rect.width >= 24 && rect.height >= 24 && window.innerHeight - rect.bottom < 300) {
+              return el
+            }
+          }
+        } catch (error) {
+          // invalid selector — skip
+        }
+      }
+      const buttons = Array.from(document.querySelectorAll('button')).filter((button) => {
+        const rect = button.getBoundingClientRect()
+        return rect.width >= 24 && rect.height >= 24 && window.innerHeight - rect.bottom < 300
+      })
+      return buttons.length > 0 ? buttons[buttons.length - 1] : null
+    }
+
+    function ringStrokeFor(tone) {
+      // "ok" adapts to the theme: white on dark themes, dark on light themes.
+      if (tone === 'ok') return 'var(--dsw-alias-label-primary,currentColor)'
+      if (tone === 'warn') return 'var(--dsw-alias-state-warn-primary,#e6a23c)'
+      if (tone === 'error') return 'var(--dsw-alias-state-error-primary,#e5484d)'
+      return 'var(--dsw-alias-label-tertiary,#81858c)'
+    }
+
+    // Rounded-rectangle outline path starting at the top-middle, clockwise.
+    // Dash starts at the top of the button, matching the requested direction.
+    function ringPath(width, height, radius) {
+      const x = radius
+      const y = radius
+      return 'M ' + (width / 2).toFixed(2) + ' 0' +
+        ' H ' + (width - x).toFixed(2) +
+        ' A ' + radius + ' ' + radius + ' 0 0 1 ' + width + ' ' + y +
+        ' V ' + (height - y).toFixed(2) +
+        ' A ' + radius + ' ' + radius + ' 0 0 1 ' + (width - x).toFixed(2) + ' ' + height +
+        ' H ' + x +
+        ' A ' + radius + ' ' + radius + ' 0 0 1 0 ' + (height - y).toFixed(2) +
+        ' V ' + y +
+        ' A ' + radius + ' ' + radius + ' 0 0 1 ' + x + ' 0' +
+        ' H ' + (width / 2).toFixed(2) +
+        ' Z'
+    }
+
+    function ringPathLength(width, height, radius) {
+      return 2 * (width - 2 * radius) + 2 * (height - 2 * radius) + 2 * Math.PI * radius
+    }
+
+    function readButtonRadius(el, rect) {
+      try {
+        const style = window.getComputedStyle(el)
+        const value = style.borderTopLeftRadius
+        if (typeof value === 'string' && value.indexOf('%') >= 0) {
+          return Math.min(rect.width, rect.height) / 2
+        }
+        const px = parseFloat(value)
+        if (Number.isFinite(px) && px > 0) {
+          return Math.min(px, Math.min(rect.width, rect.height) / 2)
+        }
+      } catch (error) {
+        // fall through
+      }
+      return Math.min(rect.width, rect.height) / 2
+    }
+
     function apply(ctx) {
       let t = (key) => (ZH[key] !== undefined ? ZH[key] : String(key))
       try {
@@ -184,24 +256,9 @@ window.__ModuleLoader__.load({
       }
 
       function Widget() {
-        const COLLAPSE_KEY = 'ogw-collapsed-v1'
-        function readCollapsed() {
-          try {
-            return window.localStorage.getItem(COLLAPSE_KEY) === '1'
-          } catch (error) {
-            return false
-          }
-        }
-        const [collapsed, setCollapsedRaw] = React.useState(readCollapsed)
-        function setCollapsed(value) {
-          setCollapsedRaw(value)
-          try {
-            window.localStorage.setItem(COLLAPSE_KEY, value ? '1' : '0')
-          } catch (error) {
-            // storage unavailable — keep in-memory state only
-          }
-        }
+        const [collapsed, setCollapsed] = React.useState(false)
         const [state, setState] = React.useState({ kind: 'loading' })
+        const [btnBox, setBtnBox] = React.useState(null)
         const inFlight = React.useRef(false)
 
         const load = React.useCallback(() => {
@@ -233,39 +290,103 @@ window.__ModuleLoader__.load({
           return () => window.clearInterval(id)
         }, [load])
 
+        // Always track the send button with requestAnimationFrame: the ring is
+        // re-anchored on the very next frame the button moves, so it follows
+        // the button live (no 1s polling lag, no stale position). Also makes
+        // the ring available the instant the user collapses — no pill flash.
+        React.useEffect(() => {
+          let raf = 0
+          let button = findSendButton()
+          let lastKey = ''
+          const loop = () => {
+            raf = window.requestAnimationFrame(loop)
+            if (!button || !button.isConnected) button = findSendButton()
+            if (!button) {
+              if (lastKey !== 'none') {
+                lastKey = 'none'
+                setBtnBox(null)
+              }
+              return
+            }
+            const rect = button.getBoundingClientRect()
+            const radius = readButtonRadius(button, rect)
+            const key = rect.left + '|' + rect.top + '|' + rect.width + '|' + rect.height + '|' + radius
+            if (key !== lastKey) {
+              lastKey = key
+              setBtnBox({ x: rect.left, y: rect.top, w: rect.width, h: rect.height, r: radius })
+            }
+          }
+          loop()
+          return () => window.cancelAnimationFrame(raf)
+        }, [])
+
         if (collapsed) {
           const usage = state.kind === 'done' && state.value ? state.value.usage : null
           const win = usage && usage.rolling
           const p = pctOf(win)
-          const tone = toneOf(win)
-          const CIRC = 2 * Math.PI * 24
-          let centerText
-          let centerTone = tone
+          let fillHeight
+          let fillTone
+          let tip
           if (state.kind === 'loading') {
-            centerText = '…'
-            centerTone = 'none'
+            fillHeight = 0
+            fillTone = 'none'
+            tip = t('loading')
           } else if (state.kind === 'failure') {
-            centerText = '!'
-            centerTone = 'error'
+            fillHeight = 100
+            fillTone = 'error'
+            tip = t('network') + ' · ' + t('expandHint')
           } else if (p === null) {
-            centerText = 'GO'
-            centerTone = 'none'
+            fillHeight = 0
+            fillTone = 'none'
+            tip = t('title') + ' · ' + t('expandHint')
           } else {
-            centerText = Math.round(p) + '%'
+            fillHeight = p
+            fillTone = toneOf(win)
+            tip = '5h ' + Math.round(p) + '% · ' + t('expandHint')
           }
-          return React.createElement('div', { className: 'ogw-capsule', title: t('expandHint'), onClick: () => setCollapsed(false) },
-            React.createElement('svg', { className: 'ogw-ring', viewBox: '0 0 56 56' },
-              React.createElement('circle', { cx: 28, cy: 28, r: 24, fill: 'none', stroke: 'var(--dsw-alias-bg-layer-1,rgba(15,17,21,.08))', strokeWidth: 4 }),
-              p !== null && React.createElement('circle', {
-                cx: 28, cy: 28, r: 24, fill: 'none', strokeWidth: 4, strokeLinecap: 'round',
-                className: 'ogw-tone-' + centerTone,
-                strokeDasharray: (CIRC * p / 100).toFixed(2) + ' ' + CIRC.toFixed(2),
-              })
-            ),
-            React.createElement('div', { className: 'ogw-ring-center' },
-              React.createElement('span', { className: 'ogw-tone-' + centerTone }, centerText)
+
+          if (btnBox) {
+            const PAD = 3
+            const W = btnBox.w + PAD * 2
+            const H = btnBox.h + PAD * 2
+            const radius = Math.min(btnBox.r + PAD, Math.min(W, H) / 2)
+            const path = ringPath(W, H, radius)
+            const length = ringPathLength(W, H, radius)
+            const dash = p === null ? 0 : length * fillHeight / 100
+            return React.createElement('div', {
+              className: 'ogw-ring-wrap',
+              style: {
+                left: (btnBox.x - PAD) + 'px',
+                top: (btnBox.y - PAD) + 'px',
+                width: W + 'px',
+                height: H + 'px',
+              },
+            },
+              React.createElement('svg', { className: 'ogw-ring-svg', viewBox: '0 0 ' + W + ' ' + H },
+                React.createElement('path', {
+                  d: path,
+                  fill: 'none',
+                  stroke: 'var(--dsw-alias-border-l2,rgba(15,17,21,.18))',
+                  strokeWidth: 2,
+                }),
+                React.createElement('path', {
+                  d: path,
+                  fill: 'none',
+                  stroke: ringStrokeFor(fillTone),
+                  strokeWidth: 2,
+                  strokeLinecap: 'round',
+                  className: 'ogw-ring-hit',
+                  title: tip,
+                  onClick: () => setCollapsed(false),
+                  strokeDasharray: dash.toFixed(2) + ' ' + length.toFixed(2),
+                })
+              )
             )
-          )
+          }
+
+          // No send button found — render nothing (ring is the only collapsed
+          // form; there is no pill/bar fallback anymore).
+          return null
         }
 
         let body
@@ -314,10 +435,7 @@ window.__ModuleLoader__.load({
             React.createElement('span', null,
               t('updated') + ' ' + (state.kind === 'done' && state.value && state.value.fetchedAt ? fmtTime(state.value.fetchedAt) : '–')
             ),
-            React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 2 } },
-              React.createElement('span', null, t('autoHint')),
-              React.createElement('button', { className: 'ogw-icon', title: t('collapse'), onClick: () => setCollapsed(true) }, '—')
-            )
+            React.createElement('span', null, t('autoHint'))
           )
         )
       }
